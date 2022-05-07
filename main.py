@@ -1,4 +1,4 @@
-    import random as rnd
+import random as rnd
 
 import numpy as np
 from matplotlib.pyplot import plot, show
