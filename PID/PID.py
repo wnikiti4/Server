@@ -1,11 +1,11 @@
 from PID.Lagrange import LagrangePoly
 
 _setPoint = 0
-_Kp = 1
-_Ki = 1
-_Kd = 1
+_Kp = 1.0
+_Ki = 1.0
+_Kd = 1.0
 
-_timeDiscrete = 1
+_timeDiscrete = 1.0
 
 
 class PID:
@@ -22,9 +22,9 @@ class PID:
     def getControlAction(value):
         global _Ki, _Kp, _Kd
         # Пропорциональная
-        proportional = (_setPoint - value[-1])
+        proportional :float = (_setPoint - value[-1])
         # Интегральная часть, по методу трапеции
-        integral = 0
+        integral = 0.0
         for it in range(1, len(value)):
             trapezoidArea = 1 / 2 * (value[it] + value[it]) * _timeDiscrete
             integral += trapezoidArea
@@ -34,5 +34,5 @@ class PID:
             postvalue = lp.interpolate(len(value))
         else:
             postvalue = value[len(value) - 2]
-        derivative = (value[len(value) - 2] - postvalue) / (2 * _timeDiscrete)
-        return _Kp * proportional + _Ki * integral + _Kd * derivative
+        derivative: float = (value[len(value) - 2] - postvalue) / (2 * _timeDiscrete)
+        return float(_Kp) * float(proportional) + float(_Ki) * float(integral) + float(_Kd) * float(derivative)
