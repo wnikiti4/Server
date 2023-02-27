@@ -1,24 +1,43 @@
 import random
 
-
 class Room():
-    global temperatureSelf, a, b, y, heaterTemperature, outsideTemperature
-
-    def __init__(self, a, b, y,
-                 heaterTemperature, outsideTemperature):
-        _v = random.randrange(-1350, 375) / 1000.0
-        _w = random.randrange(57, 70) / 10.0
+    def __init__(self, a, y):
         _Q = random.randrange(190, 210) / 10.0
-        self.temperatureSelf =  _Q
+        self.temperatureSelf =_Q
+        # TODO: преписать на массив 6 значний
         self.a = a
-        self.b = b
         self.y = y
-        self.heaterTemperature = heaterTemperature
-        self.outsideTemperature = outsideTemperature
 
-    def setNewTemperature(self, temperatureLeft, temperatureRight, outsideTemerature: float, heaterTemperature):
-        global temperatureSelf, a, b, y
-        _v = random.randrange(0, 375) / 1000.0
-        _w = random.randrange(57, 70) / 10.0
-        self.temperatureSelf = (1 - 2 * self.a - self.b) * self.temperatureSelf + self.a * (
-                    temperatureLeft + temperatureRight) + self.b * outsideTemerature + self.y * heaterTemperature * _v + _w
+    def setNewTemperature(self, sosedy, outsideTemerature: float, heaterTemperature):
+        if sosedy.left is None:
+            leftTemp = outsideTemerature
+        else:
+            leftTemp = sosedy.left.temperatureSelf
+        if sosedy.right is None:
+            righTemp = outsideTemerature
+        else:
+            righTemp = sosedy.right.temperatureSelf
+        if sosedy.top is None:
+            topTemp = outsideTemerature
+        else:
+            topTemp = sosedy.top.temperatureSelf
+        if sosedy.bot is None:
+            botTemp = outsideTemerature
+        else:
+            botTemp = sosedy.bot.temperatureSelf
+        if sosedy.up is None:
+            upTemp = outsideTemerature
+        else:
+            upTemp = sosedy.up.temperatureSelf
+        if sosedy.down is None:
+            downTemp = outsideTemerature
+        else:
+            downTemp = sosedy.down.temperatureSelf
+        # TODO: преписать на массив 6 значний
+        incomeRooms = self.a * (leftTemp - self.temperatureSelf) + self.a*(righTemp - self.temperatureSelf) + self.a*(topTemp - self.temperatureSelf) + self.a*(botTemp - self.temperatureSelf) + self.a*(upTemp - self.temperatureSelf) + self.a*(downTemp - self.temperatureSelf)
+        incomeHeater = self.y * heaterTemperature
+        self.temperatureSelf = self.temperatureSelf + incomeRooms + incomeHeater
+
+
+    def returnTempetatuteSelf(self):
+        return self.temperatureSelf

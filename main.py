@@ -1,142 +1,200 @@
-import random as rnd
 from dataclasses import dataclass
-import numpy as np
-from matplotlib.pyplot import plot, show
-from MQTT.PushMQTT import push_mail, get_temperature_in_valve
-from Selenide.ParseTemperature import  get_one_temperature
+from random import random
+
+import scipy.interpolate
+import scipy.optimize
+
+from matplotlib.pyplot import plot, show, legend
+from scipy.optimize import minimize
+
 from DataHelper.CVSDataHelper import CVSDataHelper
 from MathObject.Room import Room
 from PID.PID import PID
-
-global x, result, index, build, temperature, control, integral, error, consumption
-
-setTemperature = 25
-# Коэффициент теплоносителя
-coefficientCoolant = 20
-# Коэффициент для Модели Здания 1 мерного
-a = 0.1
-b = 0.5
-y = 0.8
-# Коэффициенты для Модели Здания 2 комнаты
-A = np.array([[0.1, 1 - 2 * a - b], [1 - 2 * a - b, 0.1]])
-Vk = np.array([rnd.randrange(-1350, 372) / 1000.0, rnd.randrange(-1350, 372) / 1000.0])
-
-# Стартовые параметры
-arithmeticMeanTemperatureInBuild = setTemperature
-startHeaterTemperature = 20.0
-startOutsideTemperature = 5.0
-# Длинна полинома Лагранжа для пид регулятора
-lengthLagrangePolinomial = 4
-# Количество комнат
-countRoom = 30
+from DataSet.ParamSystem import paramSystem
 
 
 @dataclass
-class PidValue:
-    k1: float = 2.0
-    k2: float = 0.9
-    k3: float = 0.2
+class sosedy_val_A:
+    up: float
+    down: float
+    left: float
+    right: float
+    top: float
+    bot: float
 
 
-bestPIDValue: PidValue
+@dataclass
+class sosedy:
+    up: Room
+    down: Room
+    left: Room
+    right: Room
+    top: Room
+    bot: Room
 
 
-def initialize(temperature_in_valve, startOutsideTemperature):
-    global x, result, index, build, temperature, control, error, consumption
-    build = [Room(a, b, y, temperature_in_valve, startOutsideTemperature)]
-    result = [setTemperature]
-    index = 0
-    temperature = [startOutsideTemperature]
-    control = [temperature_in_valve]
-    error = [0]
-    consumption = 0
-    CVSDataHelper()
-    PID(PidValue.k1, PidValue.k2, PidValue.k3, setTemperature)
-    for it in range(countRoom - 1):
-        build.append(Room(a, b, y, startHeaterTemperature, startOutsideTemperature))
+def initialize_build_struct():
+    #TODO: преписать на массив 6 значний
+    build = [[[Room(paramSystem.a, paramSystem.y)] * paramSystem.countRoom] * paramSystem.countRoom] * paramSystem.countRoom
+    for it in range(paramSystem.countRoom):
+        for it2 in range(paramSystem.countRoom):
+            for it3 in range(paramSystem.countRoom):
+                # TODO: преписать на массив 6 значний
+                build[it][it2][it3] = Room(paramSystem.a, paramSystem.y)
+    return build
 
 
-def observe():
-    global index, result, arithmeticMeanTemperatureInBuild, error, consumption
-    _sumTemperature = sum(c.temperatureSelf for c in build)
-    _maxTemperature = max(build, key=lambda x: x.temperatureSelf).temperatureSelf
-    _minTemperature = min(build, key=lambda x: x.temperatureSelf).temperatureSelf
-    arithmeticMeanTemperatureInBuild = _sumTemperature / len(build)
-    result.append(arithmeticMeanTemperatureInBuild)
-    error.append(abs(arithmeticMeanTemperatureInBuild - setTemperature))
-    index += 1
+def find_arithmetic_mean_temp(build):
+    sum_temp = 0
+    for it in range(paramSystem.countRoom):
+        for it2 in range(paramSystem.countRoom):
+            for it3 in range(paramSystem.countRoom):
+                sum_temp += build[it][it2][it3].returnTempetatuteSelf()
+    return sum_temp / (paramSystem.countRoom**3)
 
 
-def update(t):
-    global temperature, control, integral, result, consumption
-    _outsideTemperature = CVSDataHelper.getOutsideTemeratureForNumber(t)
-    _heaterTemperature = PID.getControlAction(result[(lengthLagrangePolinomial * -1):])
-    consumption += abs(_heaterTemperature)
-    control.append(_heaterTemperature)
-    temperature.append(_outsideTemperature)
-    for it in range(-1, countRoom - 1):
-        build[it].setNewTemperature(build[it - 1].temperatureSelf, build[it + 1].temperatureSelf, _outsideTemperature,
-                                    _heaterTemperature)
+def find_max_temp(build):
+    point = None
+    max_temp = build[0][0][0].returnTempetatuteSelf()
+    for it in range(paramSystem.countRoom):
+        for it2 in range(paramSystem.countRoom):
+            for it3 in range(paramSystem.countRoom):
+                if build[it][it2][it3].returnTempetatuteSelf() > max_temp:
+                    max_temp = build[it][it2][it3].returnTempetatuteSelf()
+                    point = it, it2, it3
+    return max_temp , point
 
+
+
+def find_min_temp(build):
+    point = None
+    min_temp = build[0][0][0].returnTempetatuteSelf()
+    for it in range(paramSystem.countRoom):
+        for it2 in range(paramSystem.countRoom):
+            for it3 in range(paramSystem.countRoom):
+                if build[it][it2][it3].returnTempetatuteSelf() < min_temp:
+                    min_temp = build[it][it2][it3].returnTempetatuteSelf()
+                    point = it, it2, it3
+    return min_temp, point
+
+
+def initialize_ambient_temp():
+    dh = CVSDataHelper()
+    _y = list()
+    _x = list()
+    for it in range(dh.getCountElement()):
+        _y.append(dh.getOutsideTemeratureForNumber(it))
+        _x.append(it)
+    return scipy.interpolate.interp1d(_x, _y, kind='cubic')
+
+
+def calculation_house_function(y_interp=None, build=None, startDay=0, endDay=paramSystem.day):
+    result = [20]
+    control = list()
+    ambientTemp = list()
+    _heaterTemperature = paramSystem.startHeaterTemperature
+    error = list()
+    for t in range(startDay * paramSystem.tochnst, endDay * paramSystem.tochnst):
+        _outsideTemperature: float = y_interp(t)
+        buildTemp = calculation_build_temp(_outsideTemperature, _heaterTemperature, build)
+        _heaterTemperature = PID.getControlAction(result)
+        # логическое ограничение системы, что можно подать температуру меньше чем температура в доме
+        if _heaterTemperature < buildTemp:
+            _heaterTemperature = buildTemp
+        control.append(_heaterTemperature)
+        ambientTemp.append(_outsideTemperature)
+        result.append(buildTemp)
+        error.append(abs(buildTemp - paramSystem.setTemperature))
+    return error, control, result, ambientTemp
+
+
+#TODO: не совсем правильно считает температуру здания в ней всегда остается положительная температура, нужно вводить параметр б и по новой все дебажить
+def calculation_build_temp(_outsideTemperature, _heaterTemperature, build):
+    for it in range(0, paramSystem.countRoom - 1, 1):
+        for it2 in range(0, paramSystem.countRoom - 1, 1):
+            for it3 in range(0, paramSystem.countRoom - 1, 1):
+                if it == paramSystem.countRoom:
+                    sosedy.right = None
+                else:
+                    sosedy.right = build[it+1][it2][it3]
+                if it == 0:
+                    sosedy.left = None
+                else:
+                    sosedy.left = build[it - 1][it2][it3]
+                if it2 == paramSystem.countRoom:
+                    sosedy.up = None
+                else:
+                    sosedy.up = build[it][it2+1][it3]
+                if it2 == 0:
+                    sosedy.down = None
+                else:
+                    sosedy.down = build[it][it2-1][it3]
+                if it3 == paramSystem.countRoom:
+                    sosedy.top = None
+                else:
+                    sosedy.top = build[it][it2][it3+1]
+                if it3 == 0:
+                    sosedy.bot = None
+                else:
+                    sosedy.bot = build[it][it2][it3-1]
+
+                build[it][it2][it3].setNewTemperature(sosedy,_outsideTemperature,_heaterTemperature)
+    min_temp = find_min_temp(build)
+    av = find_arithmetic_mean_temp(build)
+    max_temp = find_max_temp(build)
+    return av
 
 def main():
-    global answer, bestPIDValue
-    # temperature_in_valve = get_temperature_in_valve
-    # _outsideTemperature = get_one_temperature("2022-05-09 ", "22:00")
-    temperature_in_valve = 50
-    _outsideTemperature = 0
-    local_error = 10000000
-    local_consumption = 10000000
-    print("Пользовательские настройки? y/n")
-    first_answer = input()
-    if first_answer == "y":
-        answer = "y"
-        while answer == "y":
-            print("Введите k1:")
-            PidValue.k1 = input()
-            print("Введите k2:")
-            PidValue.k2 = input()
-            print("Введите k3:")
-            PidValue.k3 = input()
-            initialize(temperature_in_valve, _outsideTemperature)
-            for t in range(30):
-                update(t)
-                observe()
-            print(max(error))
-            print(consumption)
-            plot(control)
-            plot(result)
-            plot(temperature)
-            show()
-            bestPIDValue = PidValue
-            print("Продолжить настройку? y/n")
-            answer = input()
-    if first_answer == "n":
-        print("происходит расчет...")
-        for k1 in range(-100, 100):
-            if (k1 % 10 == 0): print(".")
-            for k2 in range(-100, 100):
-                for k3 in range(-100, 100):
-                    PidValue.k1 = k1
-                    PidValue.k2 = k2
-                    PidValue.k3 = k3
-                    initialize(temperature_in_valve, _outsideTemperature)
-                    for t in range(30):
-                        update(t)
-                        observe()
-                    if (local_error > max(error)) and (local_consumption > consumption):
-                        local_error = max(error)
-                        local_consumption = consumption
-                        bestPIDValue = PidValue
-        print(local_error)
-        print(local_consumption)
-        print(str(bestPIDValue))
-        plot(control)
-        plot(result)
-        plot(temperature)
-        show()
-    push_mail(str(bestPIDValue))
+    # переписать на перерасчет каждые 2 дня
+    # Разделить датасет на проверочную и для находжения коэффицентов
+    # Сделать 2 результата: 1) в том когда 1 раз посчитали и дальше просто используем параметры 2) Пресчет каждые 3-4 меняем параметры пид регулятора
+    param = [random(), random(), random()]
+    param = find_pid_value(param, paramSystem.day)
+    PID(param, 20)
+    struct_build = initialize_build_struct()
+    function_ambient_temp = initialize_ambient_temp()
+    error_1, control_1, result_1, ambient_temp_1 = calculation_house_function(function_ambient_temp, struct_build)
+    print(max(error_1))
+    plot(control_1, label='Температура Нагревателя')
+    plot(result_1, label='Температура Дома')
+    plot(ambient_temp_1, label='Температура на Улице')
+    #TODO: сделать перерасчет коэфПид регулятора каждые 3 дня и можно уже в статью кидать
+    param = [random(), random(), random()]
+    param = find_pid_value(param, 2)
+    PID(param, 20)
+    struct_build = initialize_build_struct()
+    function_ambient_temp = initialize_ambient_temp()
+    error_2, control_2, result_2, ambient_temp_2 = calculation_house_function(function_ambient_temp, struct_build)
+    print(max(error_2))
+    plot(control_2, label='Температура Нагревателя 2')
+    plot(result_2, label='Температура Дома 2')
+    legend()
+    show()
 
+
+
+def fun(param):
+    PID(param, 20)
+    struct_build = initialize_build_struct()
+    function_ambient_temp = initialize_ambient_temp()
+    error, control, result, ambient_temp = calculation_house_function(function_ambient_temp, struct_build)
+    return max(error)
+
+#TODO: функция рассчета для 2 дней
+def fun2(param):
+    PID(param, 20)
+    struct_build = initialize_build_struct()
+    function_ambient_temp = initialize_ambient_temp()
+    error, control, result, ambient_temp = calculation_house_function(function_ambient_temp, struct_build, 0 , paramSystem.days_calculate_fun2)
+    return max(error)
+
+
+def find_pid_value(param, day):
+    if day == paramSystem.day:
+        return minimize(fun, param, method='Powell').x
+    else:
+        return minimize(fun2, param, method='Powell').x
 
 if __name__ == '__main__':
     main()
+
