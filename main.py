@@ -4,13 +4,15 @@ from random import random
 import scipy.interpolate
 import scipy.optimize
 
-from matplotlib.pyplot import plot, show, legend
+from matplotlib.pyplot import plot, show, legend, xlabel, ylabel
 from scipy.optimize import minimize
 
 from DataHelper.CVSDataHelper import CVSDataHelper
 from MathObject.Room import Room
 from PID.PID import PID
 from DataSet.ParamSystem import paramSystem
+from Selenide import tempPars
+from Selenide.ParseTemperature import get_one_temperature
 
 
 @dataclass
@@ -155,9 +157,11 @@ def main():
     function_ambient_temp = initialize_ambient_temp()
     error_1, control_1, result_1, ambient_temp_1 = calculation_house_function(function_ambient_temp, struct_build)
     print(max(error_1))
-    plot(control_1, label='Температура Нагревателя')
-    plot(result_1, label='Температура Дома')
-    plot(ambient_temp_1, label='Температура на Улице')
+    plot(control_1, label='Температура теплоносителя')
+    plot(result_1, label='Средняя температура по зданию')
+    plot(ambient_temp_1, label='Температура наружного воздуха')
+    xlabel('Номер измерения')
+    ylabel('Температура')
     #TODO: сделать перерасчет коэфПид регулятора каждые 3 дня и можно уже в статью кидать
     param = [random(), random(), random()]
     param = find_pid_value(param, 2)
@@ -191,10 +195,12 @@ def fun2(param):
 
 def find_pid_value(param, day):
     if day == paramSystem.day:
-        return minimize(fun, param, method='Powell').x
+        value = minimize(fun, param, method='Powell')
+        print(value)
+        return value.x
     else:
         return minimize(fun2, param, method='Powell').x
 
 if __name__ == '__main__':
-    main()
-
+    #main()
+    tempPars.get_temperature()
