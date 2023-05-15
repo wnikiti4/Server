@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from random import random
 
+import numpy
 import scipy.interpolate
 import scipy.optimize
 
@@ -11,9 +12,8 @@ from DataHelper.CVSDataHelper import CVSDataHelper
 from MathObject.Room import Room
 from PID.PID import PID
 from DataSet.ParamSystem import paramSystem
-from Selenide import tempPars
-from Selenide.ParseTemperature import get_one_temperature
-
+from numpy import array, exp, arange
+from scipy.optimize import curve_fit
 
 @dataclass
 class sosedy_val_A:
@@ -64,7 +64,7 @@ def find_max_temp(build):
                 if build[it][it2][it3].returnTempetatuteSelf() > max_temp:
                     max_temp = build[it][it2][it3].returnTempetatuteSelf()
                     point = it, it2, it3
-    return max_temp , point
+    return max_temp, point
 
 
 
@@ -100,7 +100,7 @@ def calculation_house_function(y_interp=None, build=None, startDay=0, endDay=par
         _outsideTemperature: float = y_interp(t)
         buildTemp = calculation_build_temp(_outsideTemperature, _heaterTemperature, build)
         _heaterTemperature = PID.getControlAction(result)
-        # логическое ограничение системы, что можно подать температуру меньше чем температура в доме
+        #TODO логическое ограничение системы, что можно подать температуру меньше чем температура в доме
         if _heaterTemperature < buildTemp:
             _heaterTemperature = buildTemp
         control.append(_heaterTemperature)
@@ -147,7 +147,7 @@ def calculation_build_temp(_outsideTemperature, _heaterTemperature, build):
     return av
 
 def main():
-    # переписать на перерасчет каждые 2 дня
+    #TODO переписать на перерасчет каждые 2 дня
     # Разделить датасет на проверочную и для находжения коэффицентов
     # Сделать 2 результата: 1) в том когда 1 раз посчитали и дальше просто используем параметры 2) Пресчет каждые 3-4 меняем параметры пид регулятора
     param = [random(), random(), random()]
@@ -176,7 +176,7 @@ def main():
     show()
 
 
-
+#TODO: Переписать на глобальную переменную или еще как-то передать в количество дней для анализа
 def fun(param):
     PID(param, 20)
     struct_build = initialize_build_struct()
@@ -201,6 +201,44 @@ def find_pid_value(param, day):
     else:
         return minimize(fun2, param, method='Powell').x
 
+# формат x как вектор комнат те x[0] в первой комнате x[1] во второй и тд + последний x вседа температура нагревателя]
+def funcTempRoom(x, A0, Y1,A2):
+    return (x[1]-x[0])*A0+(x[2]-x[0])*A2 + Y1*x[3]
+    # A0x0+A2x2 - A0x[0]-A2x[0] + Y1*x[1]
+    # (A0+A2)*(-1*x[0])+Y1*x[1] + k
+    # k = A0*x1 +A2*x2  = Ax1-A2x1 + A2x2  = Ax1 + A2(x2-x1)
+    # A = A0+A2 | A0 =A -A2
+    # return -1*A*x[0]+Y1*x[1]+A*x1 + A2*(x2-x1)
+    #TODO: F(x) = a * x ^ 3
+    #   F(x[0],x[1]) = (a-x[0])*b + c*x[1] + d*x[0]
+
+def funcT(x, a , b ,c ,d):
+    return (a-x[0])*b + c*x[1] + d*x[0]
+
+#TODO: Спарсить температуры каждые 3 часа по Томску с 13 года по 22 - ветер?
+
+#TODO: 2 графика 1) Реальное x- калории y - температура f1 - то что было f2 - реком
+# на малине сервер в телеграм бот
+
+
 if __name__ == '__main__':
-    #main()
-    tempPars.get_temperature()
+    # main()
+    #tempPars.get_temperature()
+
+    #TODO: создать матрицу со значениями initialize_build_struct()
+    x0 = array([12,11,13,15,16,16,15,14,15,12,11,12,8,10,9,7,6])
+    x1 = array([12,11,13,15,16,16,15,14,15,12,11,12,8,10,9,7,6])
+    x2 = array([12,11,13,15,16,16,15,14,15,12,11,12,8,10,9,7,6])
+    TempHeater = numpy.random.normal(loc=10, scale=0.2, size=len(x0))
+    z = numpy.random.normal(loc=10, scale=0.2, size=len(x0))
+    #TODO: Для крайнего элемета матрицы построить посчитать коэффицент A Y
+    #TODO: расчитать примерные коэффиценты для других
+    #TODO: Для крайнего элемета матрицы построить посчитать коэффицент A Y
+    #TODO: расчитать примерные коэффиценты для других
+    #TODO: Усреднить значния коэффициентов
+    print("step")
+    p0 = [1.0, 1.0, 1.0]
+    params, _ = curve_fit(funcTempRoom, (x0, x1 , x2, TempHeater), z, p0)
+
+
+    print("params: ", params)
