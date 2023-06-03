@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+from selenium.webdriver import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.select import Select
@@ -7,6 +8,7 @@ from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import UnexpectedAlertPresentException
 from time import sleep
+
 
 def get_temperature():
     start_date = datetime.strptime("13.03.2023", "%d.%m.%Y")
@@ -47,3 +49,19 @@ def get_temperature():
 def daterange(start_date, end_date):
     for n in range(int((end_date - start_date).days) + 1):
         yield start_date + timedelta(n)
+
+def get_next_temperature(city):
+    chrome_options = Options()
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("no-sandbox")
+    # chrome_options.add_argument('--headless')
+    # chrome_options.add_argument('--disable-gpu')  # Last I checked this was necessary.
+    chrome_options.add_argument("--window-size=1000,800")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    driver = webdriver.Chrome(ChromeDriverManager().install(), chrome_options=chrome_options)
+    driver.get("https://meteoinfo.ru")
+    driver.find_element(by=By.CSS_SELECTOR, value="#select2-sel_search-container").click()
+    driver.find_element(by=By.CSS_SELECTOR, value="body > span > span > span.select2-search.select2-search--dropdown > input").send_keys(""+city)
+    driver.find_element(by=By.CSS_SELECTOR, value="body > span > span > span.select2-search.select2-search--dropdown > input").send_keys(Keys.ENTER)
+    answer = driver.find_element(by=By.CSS_SELECTOR, value="#div_print_0  tr:nth-child(3)").text
+    return answer
