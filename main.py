@@ -9,7 +9,7 @@ from Selenide.tempPars import get_next_temperature
 from math_calculate_main import main
 
 con = sl.connect('DB/thecode.db')
-bot = telebot.TeleBot("6255814893:AAGnzT2EImwKJRR1HO8fyTod5u7lNq8mJqA")
+bot = telebot.TeleBot("Token")
 
 
 @bot.message_handler(commands=['help'])
